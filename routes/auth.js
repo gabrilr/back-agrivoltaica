@@ -1,0 +1,75 @@
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import { db } from '../database/db.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
+
+const router = express.Router();
+
+// Registro de usuario
+router.post('/register', async (req, res) => {
+    const { usuario, contrasena, categoria } = req.body;
+
+    try {
+        // Verificar si el usuario ya existe
+        const [existingUser] = await db.query('SELECT * FROM usuarios WHERE usuario = ?', [usuario]);
+        if (existingUser.length > 0) {
+            return res.status(400).json({ message: 'El usuario ya existe' });
+        }
+
+        // Encriptar contraseña
+        const hashedPassword = await bcrypt.hash(contrasena, 10);
+
+        // Guardar usuario en la base de datos
+        await db.query(
+            'INSERT INTO usuarios (usuario, contrasena, categoria) VALUES (?, ?, ?)',
+            [usuario, hashedPassword, categoria]
+        );
+
+        res.status(201).json({ message: 'Usuario registrado con éxito' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error al registrar el usuario' });
+    }
+});
+
+// Inicio de sesión
+router.post('/login', async (req, res) => {
+    const { usuario, contrasena } = req.body;
+
+    try {
+        // Buscar usuario
+        const [users] = await db.query('SELECT * FROM usuarios WHERE usuario = ?', [usuario]);
+        const user = users[0];
+        if (!user) {
+            return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
+        }
+        
+        // Verificar contraseña
+        const isPasswordValid = await bcrypt.compare(contrasena, user.contrasena);
+        if (!isPasswordValid) {
+            return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
+        }
+
+        // Generar token JWT
+        const token = jwt.sign(
+            { idusuario: user.idusuario, usuario: user.usuario, categoria: user.categoria },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+        res.json({ token });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error al iniciar sesión' });
+    }
+});
+
+// Endpoint protegido
+router.get('/protected', authenticateToken, (req, res) => {
+    res.json({
+        message: 'Acceso concedido al endpoint protegido',
+        user: req.user, // Contiene idusuario, usuario y categoria
+    });
+});
+
+export default router;
