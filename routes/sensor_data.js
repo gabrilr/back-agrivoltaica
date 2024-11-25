@@ -1,5 +1,6 @@
 import express from 'express';
 import { db } from '../database/db.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ router.get('/', (req, res) => {
     const query = `
       SELECT * FROM sensores_data
       WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 100 DAY)
-      ORDER BY timestamp ASC
+      ORDER BY timestamp ASC 
     `;
   
     db.query(query, (err, results) => {
@@ -18,6 +19,40 @@ router.get('/', (req, res) => {
   
       res.json(results);
     });
+});
+
+router.get('/last-data', authenticateToken, async (req, res) => {
+  const query = `
+    SELECT 
+      p.id AS parcela_id, 
+      p.nombre AS parcela_nombre, 
+      p.mac AS parcela_mac, 
+      sd.id AS id, 
+      sd.iluminacion, 
+      sd.humedad_suelo, 
+      sd.iluminacion_2, 
+      sd.humedad_suelo_2, 
+       
+      sd.timestamp 
+    FROM parcelas p
+    LEFT JOIN sensor_data sd 
+      ON p.mac = sd.mac
+    WHERE sd.timestamp = (
+      SELECT MAX(timestamp) 
+      FROM sensor_data 
+      WHERE sensor_data.mac = p.mac
+    );
+  `;
+  //sd.temp, 
+  //sd.humedad_aire,
+  
+  try {
+    const [results] = await db.query(query);
+    res.json(results); // Enviar resultados en la respuesta
+  } catch (err) {
+    console.error('Error al obtener el último dato de cada parcela:', err);
+    res.status(500).json({ error: 'Error al obtener datos', details: err });
+  }
 });
 
 // Ruta para obtener datos por rango de fechas
