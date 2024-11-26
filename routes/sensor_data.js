@@ -15,7 +15,7 @@ router.post('/', async (req, res) => {
   try {
     const [dailyAverages] = await db.query(`
       SELECT 
-        DATE(timestamp) AS day,
+        DATE_FORMAT(timestamp, '%Y-%m-%d') AS day,
         ROUND(AVG(iluminacion), 2) AS avg_iluminacion,
         ROUND(AVG(humedad_suelo), 2) AS avg_humedad_suelo,
         ROUND(AVG(humedad_aire), 2) AS avg_humedad_aire,
