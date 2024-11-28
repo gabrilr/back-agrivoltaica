@@ -32,32 +32,61 @@ router.post('/', async (req, res) => {
   }
 });
 
-//OBTENEMOS EL MEJOR RANGO POSIBLE DE TODOS LOS DIAS
-router.post('/rango-optimo', async (req, res) => {
-  const { rango, mac, iluminacion_optima, humedad_suelo_optima, humedad_aire_optima, temp_optima } = req.body;
+function rangoOptimoMultivariable(datos, valoresOptimos, N) {
+  let mejorInicio = 0;
+  let menorScore = Infinity;
+  let mejorRango = [];
 
-  if (!rango || !mac || !iluminacion_optima || !humedad_suelo_optima || !humedad_aire_optima || !temp_optima) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+  for (let i = 0; i <= datos.length - N; i++) {
+    const ventana = datos.slice(i, i + N);
+    let distancia = 0;
+
+    // Calcula el score usando la distancia euclidiana
+    for (const { avg_temp, avg_humedad_suelo, avg_humedad_aire, avg_iluminacion } of ventana) {
+      const { temp, humedad_suelo, humedad_aire, iluminacion } = valoresOptimos;
+      // Usamos la distancia euclidiana (cuadrado de las diferencias)
+      distancia += Math.pow(avg_temp - temp, 2);            // (avg_temp - temp)^2
+      distancia += Math.pow(avg_humedad_suelo - humedad_suelo, 2); // (avg_humedad_suelo - humedad_suelo)^2
+      distancia += Math.pow(avg_humedad_aire - humedad_aire, 2);  // (avg_humedad_aire - humedad_aire)^2
+      distancia += Math.pow(avg_iluminacion - iluminacion, 2);      // (avg_iluminacion - iluminacion)^2
+    }
+
+    // Aplica la raíz cuadrada para obtener la distancia euclidiana total
+    distancia = Math.sqrt(distancia);
+
+    // Actualiza el mejor rango si el score es menor que el anterior
+    if (distancia < menorScore) {
+      menorScore = distancia;
+      mejorInicio = i;
+      mejorRango = ventana;
+    }
   }
 
-  const valoresOptimos = {
-    iluminacion: parseFloat(iluminacion_optima),
-    humedad_suelo: parseFloat(humedad_suelo_optima),
-    humedad_aire: parseFloat(humedad_aire_optima),
-    temp: parseFloat(temp_optima),
-  };
+  // Regresa los días de inicio y final del mejor rango
+  const diaInicio = datos[mejorInicio].day;
+  const diaFinal = datos[mejorInicio + N - 1].day;
+  return { diaInicio, diaFinal, mejorRango };
+}
 
-  const ponderaciones = {
-    iluminacion: 0.4,
-    humedad_suelo: 0.3,
-    humedad_aire: 0.2,
-    temp: 0.1,
-  };
 
+// Endpoint para obtener el rango óptimo
+router.post('/rango-optimo', async (req, res) => {
   try {
-    const [dailyAverages] = await db.query(`
+    // Parámetros de entrada (valores óptimos y tamaño del rango)
+    const { mac, temp_optima, humedad_suelo_optima, humedad_aire_optima, iluminacion_optima, rango } = req.body;
+    const valoresOptimos = {
+      temp: parseFloat(temp_optima),
+      humedad_suelo: parseFloat(humedad_suelo_optima),
+      humedad_aire: parseFloat(humedad_aire_optima),
+      iluminacion: parseFloat(iluminacion_optima),
+    };
+
+    const N = parseInt(rango, 10);
+
+    // Consulta a la base de datos
+    const [rows] = await db.query(`
       SELECT 
-        DATE(timestamp) AS day,
+        DATE_FORMAT(timestamp, '%Y-%m-%d') AS day,
         ROUND(AVG(iluminacion), 2) AS avg_iluminacion,
         ROUND(AVG(humedad_suelo), 2) AS avg_humedad_suelo,
         ROUND(AVG(humedad_aire), 2) AS avg_humedad_aire,
@@ -68,62 +97,20 @@ router.post('/rango-optimo', async (req, res) => {
       ORDER BY day ASC;
     `, [mac]);
 
-    if (dailyAverages.length === 0) {
-      return res.status(404).json({ error: 'No se encontraron datos para la MAC proporcionada' });
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'No se encontraron datos para el rango solicitado.' });
     }
 
-    const scores = dailyAverages.map(dayData => {
-      const score =
-        ponderaciones.iluminacion * (1 - Math.abs(dayData.avg_iluminacion - valoresOptimos.iluminacion) / valoresOptimos.iluminacion) +
-        ponderaciones.humedad_suelo * (1 - Math.abs(dayData.avg_humedad_suelo - valoresOptimos.humedad_suelo) / valoresOptimos.humedad_suelo) +
-        ponderaciones.humedad_aire * (1 - Math.abs(dayData.avg_humedad_aire - valoresOptimos.humedad_aire) / valoresOptimos.humedad_aire) +
-        ponderaciones.temp * (1 - Math.abs(dayData.avg_temp - valoresOptimos.temp) / valoresOptimos.temp);
-
-      return { ...dayData, score };
-    });
-
-    let bestRange = null;
-    let maxScore = -Infinity;
-
-    for (let i = 0; i <= scores.length - rango; i++) {
-      const range = scores.slice(i, i + rango);
-      const isConsecutive = range.every((day, index) => {
-        if (index === 0) return true;
-        const prevDate = new Date(range[index - 1].day);
-        const currDate = new Date(day.day);
-        return (currDate - prevDate) === 86400000;
-      });
-
-      if (!isConsecutive) continue;
-
-      const rangeScore = range.reduce((sum, day) => sum + day.score, 0);
-
-      if (rangeScore > maxScore) {
-        maxScore = rangeScore;
-        bestRange = range;
-      }
-    }
-
-    if (!bestRange) {
-      return res.status(404).json({ error: 'No se encontró un rango consecutivo óptimo' });
-    }
-
-    res.json({
-      rango: {
-        inicio: bestRange[0].day.toISOString().split('T')[0],
-        fin: bestRange[bestRange.length - 1].day.toISOString().split('T')[0],
-      },
-      detalles: bestRange.map(day => ({
-        ...day,
-        day: day.day.toISOString().split('T')[0] // Ajustar el formato de fecha
-      })),
-    });
-  } catch (err) {
-    console.error('Error al calcular el rango óptimo:', err);
-    res.status(500).json({ error: 'Error al calcular el rango óptimo', details: err });
+    // Lógica para encontrar el rango óptimo
+    const { diaInicio, diaFinal, mejorRango } = rangoOptimoMultivariable(rows, valoresOptimos, N);
+  
+    // Respuesta al cliente
+    res.json({ diaInicio, diaFinal, mejorRango });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener el rango óptimo' });
   }
 });
-
 
 router.get('/last-data', authenticateToken, async (req, res) => {
   const query = `
