@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '10h' }
         );
-        res.json({ token });
+        res.json({ token, usuario: user.usuario, categoria: user.categoria });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error al iniciar sesión' });
