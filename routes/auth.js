@@ -8,7 +8,11 @@ const router = express.Router();
 
 // Registro de usuario
 router.post('/register', async (req, res) => {
-    const { usuario, contrasena, categoria } = req.body;
+    const { 
+        usuario, 
+        contrasena, 
+        categoria 
+    } = req.body;
 
     try {
         // Verificar si el usuario ya existe
@@ -19,7 +23,6 @@ router.post('/register', async (req, res) => {
 
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
-
         // Guardar usuario en la base de datos
         await db.query(
             'INSERT INTO usuarios (usuario, contrasena, categoria) VALUES (?, ?, ?)',
@@ -36,26 +39,26 @@ router.post('/register', async (req, res) => {
 // Inicio de sesión
 router.post('/login', async (req, res) => {
     const { usuario, contrasena } = req.body;
+    
 
+    // Encriptar contraseña
+    const hashedPassword = await bcrypt.hash(contrasena, 10);
     try {
         // Buscar usuario
-        const [users] = await db.query('SELECT * FROM usuarios WHERE usuario = ?', [usuario]);
-        const user = users[0];
-        if (!user) {
-            return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
-        }
-        
-        // Verificar contraseña
-        const isPasswordValid = await bcrypt.compare(contrasena, user.contrasena);
-        if (!isPasswordValid) {
+        const user = await db.query('SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?', [usuario, hashedPassword] ).first();
+
+        if (!user ) {
             return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
         }
 
         // Generar token JWT
         const token = jwt.sign(
-            { idusuario: user.idusuario, usuario: user.usuario, categoria: user.categoria },
-            process.env.JWT_SECRET,
-            { expiresIn: '10h' }
+            { 
+                idusuario: user.idusuario, 
+                usuario: user.usuario, 
+                categoria: user.categoria 
+            },
+            process.env.JWT_SECRET, { expiresIn: '10h' }
         );
         res.json({ token });
     } catch (error) {

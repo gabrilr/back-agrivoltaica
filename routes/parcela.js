@@ -7,7 +7,7 @@ const router = express.Router();
 // Obtener todas las parcelas
 router.get('/', authenticateToken, async (req, res) => {
   const query = 'SELECT * FROM parcelas';
-  
+
   try {
     const [results] = await db.query(query); // Obtener todas las parcelas
     if (!results) {
@@ -22,11 +22,11 @@ router.get('/', authenticateToken, async (req, res) => {
 
 // Crear parcela
 router.post('/', authenticateToken, async (req, res) => {
-  const { nombre, mac } = req.body;
+  const { nombre, mac, id_usuario } = req.body;
 
   try {
-    const query = 'INSERT INTO parcelas (nombre, mac) VALUES (?, ?)';
-    const [result] = await db.query(query, [nombre, mac]); // Insertar nueva parcela
+    const query = 'INSERT INTO parcelas (idusuario, nombre, mac) VALUES (?, ?, ?)';
+    const [result] = await db.query(query, [id_usuario, nombre, mac]); // Insertar nueva parcela
 
     // Enviar respuesta con los datos insertados
     res.json({ id: result.insertId, nombre, mac });
