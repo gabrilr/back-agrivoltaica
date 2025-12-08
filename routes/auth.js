@@ -45,10 +45,16 @@ router.post('/login', async (req, res) => {
     const hashedPassword = await bcrypt.hash(contrasena, 10);
     try {
         // Buscar usuario
-        const [user] = await db.query('SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?',
-            [usuario, hashedPassword]);
+        const [users] = await db.query('SELECT * FROM usuarios WHERE usuario = ?', [usuario]);
 
-        if (!user[0]) {
+        if (users.length === 0) {
+            return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
+        }
+
+        const user = users[0];
+        const passwordMatch = await bcrypt.compare(contrasena, user.contrasena);
+
+        if (!passwordMatch) {
             return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
         }
 
