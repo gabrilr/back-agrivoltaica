@@ -8,10 +8,10 @@ const router = express.Router();
 
 // Registro de usuario
 router.post('/register', async (req, res) => {
-    const { 
-        usuario, 
-        contrasena, 
-        categoria 
+    const {
+        usuario,
+        contrasena,
+        categoria
     } = req.body;
 
     try {
@@ -39,24 +39,25 @@ router.post('/register', async (req, res) => {
 // Inicio de sesión
 router.post('/login', async (req, res) => {
     const { usuario, contrasena } = req.body;
-    
+
 
     // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(contrasena, 10);
     try {
         // Buscar usuario
-        const user = await db.query('SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?', [usuario, hashedPassword] ).first();
+        const [user] = await db.query('SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?',
+            [usuario, hashedPassword]);
 
-        if (!user ) {
+        if (!user[0]) {
             return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
         }
 
         // Generar token JWT
         const token = jwt.sign(
-            { 
-                idusuario: user.idusuario, 
-                usuario: user.usuario, 
-                categoria: user.categoria 
+            {
+                idusuario: user.idusuario,
+                usuario: user.usuario,
+                categoria: user.categoria
             },
             process.env.JWT_SECRET, { expiresIn: '10h' }
         );
