@@ -68,18 +68,12 @@ router.post('/login', async (req, res) => {
             process.env.JWT_SECRET, { expiresIn: '10h' }
         );
         res.json({ token });
+        //res.json({ token, categoria: user.categoria });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error al iniciar sesión' });
     }
 });
 
-// Endpoint protegido
-router.get('/protected', authenticateToken, (req, res) => {
-    res.json({
-        message: 'Acceso concedido al endpoint protegido',
-        user: req.user, // Contiene idusuario, usuario y categoria
-    });
-});
 
 export default router;

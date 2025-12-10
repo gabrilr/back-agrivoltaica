@@ -46,7 +46,7 @@ router.post('/rango-optimo', async (req, res) => {
       iluminacion: parseFloat(iluminacion_optima),
     };
 
-    const N = parseInt(rango, 10);
+    const N = parseInt(rango, 3);
 
     // Consulta a la base de datos
     const [rows] = await db.query(`
